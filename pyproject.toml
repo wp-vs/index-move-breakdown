@@ -1,0 +1,16 @@
+[project]
+name = "etf-move-breakdown"
+version = "0.1.0"
+description = "Sector ETF move breakdown into per-stock contributions"
+requires-python = ">=3.10"
+dependencies = [
+    "yfinance>=0.2.30",
+    "rich>=13.0",
+]
+
+[project.scripts]
+etf-breakdown = "etf_breakdown.cli:main"
+
+[build-system]
+requires = ["setuptools>=68.0"]
+build-backend = "setuptools.build_meta"

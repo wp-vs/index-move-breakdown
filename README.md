@@ -1,0 +1,71 @@
+# ETF Move Breakdown
+
+Decompose sector-ETF (or any ETF) price moves into per-stock weighted contributions.
+
+For a given ETF's daily move, this tool shows **how much each constituent stock contributed** to the overall index change, based on:
+
+```
+contribution_i = weight_i × stock_return_i
+```
+
+## Quick start
+
+```bash
+pip install -e .
+```
+
+### Analyse all 11 SPDR Select Sector ETFs
+
+```bash
+etf-breakdown
+```
+
+### Analyse specific ETFs
+
+```bash
+etf-breakdown XLF XLK XLE
+```
+
+### Show only top 5 holdings per ETF
+
+```bash
+etf-breakdown XLF -n 5
+```
+
+### Demo mode (no network required)
+
+```bash
+etf-breakdown --demo
+```
+
+## How it works
+
+1. **Holdings** — Fetches ETF constituent weights from Yahoo Finance via `yfinance`
+2. **Prices** — Fetches current price and previous close for each holding (~15 min delay via free Yahoo Finance API)
+3. **Calculation** — For each stock: `contribution = portfolio_weight × (current_price / prev_close − 1)`
+4. **Display** — Sorted by absolute contribution (biggest movers first), with a summary table when analysing multiple ETFs
+
+## Output columns
+
+| Column    | Meaning                                              |
+|-----------|------------------------------------------------------|
+| Weight    | Stock's weight in the ETF portfolio                  |
+| Stock Chg | Individual stock's percentage change today           |
+| Contrib   | This stock's weighted contribution to the ETF move   |
+| Price     | Current stock price                                  |
+
+The **Coverage** line shows what percentage of the ETF's total weight is represented by the displayed holdings. The **Explained** vs **Residual** values show how much of the ETF's move is accounted for by the visible holdings.
+
+## Pre-defined ETFs
+
+### SPDR Select Sector ETFs (default)
+XLB, XLC, XLE, XLF, XLI, XLK, XLP, XLRE, XLU, XLV, XLY
+
+### Also recognised
+SPY, QQQ, DIA, IWM — or pass any valid ETF ticker.
+
+## Requirements
+
+- Python >= 3.10
+- `yfinance` (Yahoo Finance data)
+- `rich` (terminal formatting)
