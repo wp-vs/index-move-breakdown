@@ -1,0 +1,554 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ETF Move Breakdown</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+<style>
+  :root {
+    --bg: #0f1117;
+    --surface: #1a1d27;
+    --surface2: #242833;
+    --border: #2e3240;
+    --text: #e4e6eb;
+    --text-dim: #8b8fa3;
+    --green: #00c853;
+    --green-bg: rgba(0,200,83,0.12);
+    --red: #ff1744;
+    --red-bg: rgba(255,23,68,0.12);
+    --blue: #448aff;
+    --blue-bg: rgba(68,138,255,0.15);
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, monospace;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+  }
+
+  header {
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    padding: 16px 24px;
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    flex-wrap: wrap;
+  }
+
+  header h1 {
+    font-size: 18px;
+    font-weight: 600;
+    white-space: nowrap;
+  }
+
+  .controls {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    flex-wrap: wrap;
+    flex: 1;
+  }
+
+  .etf-chips {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+
+  .chip {
+    padding: 4px 10px;
+    border-radius: 4px;
+    border: 1px solid var(--border);
+    background: var(--surface2);
+    color: var(--text-dim);
+    font-size: 12px;
+    cursor: pointer;
+    transition: all 0.15s;
+    user-select: none;
+  }
+
+  .chip:hover { border-color: var(--blue); color: var(--text); }
+  .chip.active { background: var(--blue-bg); border-color: var(--blue); color: var(--blue); }
+
+  .btn {
+    padding: 6px 16px;
+    border-radius: 4px;
+    border: 1px solid var(--blue);
+    background: var(--blue-bg);
+    color: var(--blue);
+    font-size: 13px;
+    cursor: pointer;
+    font-weight: 500;
+    transition: all 0.15s;
+  }
+  .btn:hover { background: var(--blue); color: white; }
+  .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  .btn-sm {
+    padding: 4px 10px;
+    font-size: 11px;
+  }
+
+  .toggle-group {
+    display: flex;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    overflow: hidden;
+  }
+  .toggle-group .chip {
+    border: none;
+    border-radius: 0;
+    border-right: 1px solid var(--border);
+  }
+  .toggle-group .chip:last-child { border-right: none; }
+
+  #status {
+    font-size: 12px;
+    color: var(--text-dim);
+    margin-left: auto;
+    white-space: nowrap;
+  }
+
+  main { padding: 20px 24px; max-width: 1400px; margin: 0 auto; }
+
+  /* Sector overview strip */
+  .sector-overview {
+    display: flex;
+    gap: 10px;
+    overflow-x: auto;
+    padding-bottom: 8px;
+    margin-bottom: 20px;
+  }
+
+  .sector-card {
+    flex: 0 0 auto;
+    min-width: 120px;
+    padding: 12px 14px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .sector-card:hover { border-color: var(--blue); }
+  .sector-card.selected { border-color: var(--blue); background: var(--blue-bg); }
+
+  .sector-card .sym { font-weight: 600; font-size: 14px; }
+  .sector-card .name { font-size: 11px; color: var(--text-dim); margin-top: 2px; }
+  .sector-card .chg { font-size: 16px; font-weight: 700; margin-top: 6px; }
+  .sector-card .prices { font-size: 11px; color: var(--text-dim); margin-top: 2px; }
+
+  .positive { color: var(--green); }
+  .negative { color: var(--red); }
+
+  /* Detail area */
+  .detail-area {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+  }
+
+  @media (max-width: 900px) {
+    .detail-area { grid-template-columns: 1fr; }
+  }
+
+  .panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 16px;
+  }
+
+  .panel h2 {
+    font-size: 14px;
+    font-weight: 600;
+    margin-bottom: 12px;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+
+  /* Table */
+  .breakdown-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+  }
+
+  .breakdown-table th {
+    text-align: left;
+    padding: 6px 8px;
+    border-bottom: 2px solid var(--border);
+    color: var(--text-dim);
+    font-weight: 500;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+    cursor: pointer;
+    user-select: none;
+    white-space: nowrap;
+  }
+  .breakdown-table th:hover { color: var(--blue); }
+  .breakdown-table th.sorted-asc::after { content: " ▲"; }
+  .breakdown-table th.sorted-desc::after { content: " ▼"; }
+
+  .breakdown-table th.right, .breakdown-table td.right { text-align: right; }
+
+  .breakdown-table td {
+    padding: 5px 8px;
+    border-bottom: 1px solid var(--border);
+    white-space: nowrap;
+  }
+
+  .breakdown-table tr:hover td { background: var(--surface2); }
+
+  .breakdown-table .sym-cell { font-weight: 600; }
+  .breakdown-table .name-cell { color: var(--text-dim); max-width: 160px; overflow: hidden; text-overflow: ellipsis; }
+
+  .bar-cell {
+    position: relative;
+    padding-right: 12px !important;
+  }
+  .bar-cell .bar {
+    position: absolute;
+    top: 2px;
+    bottom: 2px;
+    opacity: 0.2;
+    border-radius: 2px;
+  }
+  .bar-cell .bar.pos { background: var(--green); right: 50%; }
+  .bar-cell .bar.neg { background: var(--red); left: 50%; }
+
+  .summary-row {
+    font-size: 12px;
+    color: var(--text-dim);
+    margin-top: 10px;
+    display: flex;
+    gap: 16px;
+  }
+
+  /* Chart */
+  .chart-container { position: relative; width: 100%; height: 400px; }
+
+  /* Loading / empty */
+  .placeholder {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 300px;
+    color: var(--text-dim);
+    font-size: 14px;
+  }
+
+  .spinner {
+    display: inline-block;
+    width: 20px; height: 20px;
+    border: 2px solid var(--border);
+    border-top-color: var(--blue);
+    border-radius: 50%;
+    animation: spin 0.6s linear infinite;
+    margin-right: 8px;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>ETF Move Breakdown</h1>
+  <div class="controls">
+    <div class="toggle-group" id="modeToggle">
+      <div class="chip active" data-mode="demo">Demo</div>
+      <div class="chip" data-mode="live">Live</div>
+    </div>
+    <div class="etf-chips" id="etfChips"></div>
+    <button class="btn" id="analyseBtn">Analyse</button>
+    <button class="btn btn-sm" id="selectAllBtn">All</button>
+    <button class="btn btn-sm" id="selectNoneBtn">None</button>
+    <span id="status"></span>
+  </div>
+</header>
+
+<main>
+  <div class="sector-overview" id="sectorOverview">
+    <div class="placeholder" id="overviewPlaceholder">Select ETFs and click Analyse</div>
+  </div>
+
+  <div class="detail-area">
+    <div class="panel" id="tablePanel">
+      <h2 id="tablePanelTitle">Contributions</h2>
+      <div id="tableContainer">
+        <div class="placeholder">Click a sector card above to see the breakdown</div>
+      </div>
+    </div>
+
+    <div class="panel" id="chartPanel">
+      <h2 id="chartPanelTitle">Contribution Chart</h2>
+      <div class="chart-container">
+        <canvas id="contribChart"></canvas>
+      </div>
+    </div>
+  </div>
+</main>
+
+<script>
+const SECTOR_ETFS = {
+  XLB:"Materials", XLC:"Communication Services", XLE:"Energy", XLF:"Financials",
+  XLI:"Industrials", XLK:"Technology", XLP:"Consumer Staples", XLRE:"Real Estate",
+  XLU:"Utilities", XLV:"Health Care", XLY:"Consumer Discretionary"
+};
+const DEFAULT_SELECTED = ["XLF","XLK","XLE","XLV","XLI","XLC","XLY","XLP","XLU","XLRE","XLB"];
+
+let selectedETFs = new Set(DEFAULT_SELECTED);
+let mode = "demo";
+let allResults = [];
+let activeETF = null;
+let chart = null;
+let sortCol = "contribution_pct";
+let sortDir = "desc";
+
+// ── Chips ──
+const chipsEl = document.getElementById("etfChips");
+Object.entries(SECTOR_ETFS).forEach(([sym, name]) => {
+  const chip = document.createElement("div");
+  chip.className = "chip" + (selectedETFs.has(sym) ? " active" : "");
+  chip.textContent = sym;
+  chip.title = name;
+  chip.addEventListener("click", () => {
+    if (selectedETFs.has(sym)) { selectedETFs.delete(sym); chip.classList.remove("active"); }
+    else { selectedETFs.add(sym); chip.classList.add("active"); }
+  });
+  chipsEl.appendChild(chip);
+});
+
+document.getElementById("selectAllBtn").addEventListener("click", () => {
+  selectedETFs = new Set(Object.keys(SECTOR_ETFS));
+  chipsEl.querySelectorAll(".chip").forEach(c => c.classList.add("active"));
+});
+document.getElementById("selectNoneBtn").addEventListener("click", () => {
+  selectedETFs.clear();
+  chipsEl.querySelectorAll(".chip").forEach(c => c.classList.remove("active"));
+});
+
+// ── Mode toggle ──
+document.getElementById("modeToggle").addEventListener("click", (e) => {
+  const chip = e.target.closest(".chip");
+  if (!chip) return;
+  mode = chip.dataset.mode;
+  document.querySelectorAll("#modeToggle .chip").forEach(c => c.classList.remove("active"));
+  chip.classList.add("active");
+});
+
+// ── Analyse ──
+document.getElementById("analyseBtn").addEventListener("click", analyse);
+
+async function analyse() {
+  const etfs = [...selectedETFs];
+  if (etfs.length === 0) { setStatus("Select at least one ETF"); return; }
+
+  const btn = document.getElementById("analyseBtn");
+  btn.disabled = true;
+  setStatus('<span class="spinner"></span>Fetching data...');
+
+  try {
+    const params = new URLSearchParams();
+    params.set("etfs", etfs.join(","));
+    if (mode === "demo") params.set("demo", "1");
+
+    const resp = await fetch(`/api/breakdown?${params}`);
+    const data = await resp.json();
+    allResults = data.results;
+
+    renderOverview();
+    if (allResults.length > 0) selectETF(allResults[0].etf_symbol);
+    setStatus(`Updated · ${allResults.length} ETFs · ${mode === "demo" ? "demo data" : "live prices"}`);
+  } catch (err) {
+    setStatus("Error: " + err.message);
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+function setStatus(html) { document.getElementById("status").innerHTML = html; }
+
+// ── Sector overview cards ──
+function renderOverview() {
+  const el = document.getElementById("sectorOverview");
+  el.innerHTML = "";
+
+  const sorted = [...allResults].sort((a, b) => b.etf_change_pct - a.etf_change_pct);
+  sorted.forEach(r => {
+    const card = document.createElement("div");
+    card.className = "sector-card" + (r.etf_symbol === activeETF ? " selected" : "");
+    const cls = r.etf_change_pct >= 0 ? "positive" : "negative";
+    const sign = r.etf_change_pct >= 0 ? "+" : "";
+    card.innerHTML = `
+      <div class="sym">${r.etf_symbol}</div>
+      <div class="name">${r.etf_name}</div>
+      <div class="chg ${cls}">${sign}${r.etf_change_pct.toFixed(2)}%</div>
+      <div class="prices">$${r.etf_prev_close.toFixed(2)} → $${r.etf_price.toFixed(2)}</div>
+    `;
+    card.addEventListener("click", () => selectETF(r.etf_symbol));
+    el.appendChild(card);
+  });
+}
+
+function selectETF(sym) {
+  activeETF = sym;
+  document.querySelectorAll(".sector-card").forEach(c => {
+    c.classList.toggle("selected", c.querySelector(".sym").textContent === sym);
+  });
+  const result = allResults.find(r => r.etf_symbol === sym);
+  if (result) {
+    renderTable(result);
+    renderChart(result);
+  }
+}
+
+// ── Table ──
+function renderTable(result) {
+  const title = document.getElementById("tablePanelTitle");
+  const cls = result.etf_change_pct >= 0 ? "positive" : "negative";
+  const sign = result.etf_change_pct >= 0 ? "+" : "";
+  title.innerHTML = `${result.etf_symbol} Contributions <span class="${cls}">${sign}${result.etf_change_pct.toFixed(2)}%</span>`;
+
+  const contribs = [...result.contributions];
+  contribs.sort((a, b) => {
+    let va = a[sortCol], vb = b[sortCol];
+    if (sortCol === "symbol" || sortCol === "name") {
+      va = String(va).toLowerCase(); vb = String(vb).toLowerCase();
+      return sortDir === "asc" ? va.localeCompare(vb) : vb.localeCompare(va);
+    }
+    return sortDir === "asc" ? va - vb : vb - va;
+  });
+
+  const maxAbsContrib = Math.max(...contribs.map(c => Math.abs(c.contribution_pct)), 0.001);
+
+  const columns = [
+    { key: "symbol",            label: "Ticker",     cls: "" },
+    { key: "name",              label: "Name",       cls: "" },
+    { key: "weight",            label: "Weight",     cls: "right" },
+    { key: "stock_change_pct",  label: "Stock Chg",  cls: "right" },
+    { key: "contribution_pct",  label: "Contrib",    cls: "right" },
+    { key: "stock_price",       label: "Price",      cls: "right" },
+  ];
+
+  let html = '<table class="breakdown-table"><thead><tr>';
+  columns.forEach(col => {
+    let sortCls = "";
+    if (col.key === sortCol) sortCls = sortDir === "asc" ? " sorted-asc" : " sorted-desc";
+    html += `<th class="${col.cls}${sortCls}" data-col="${col.key}">${col.label}</th>`;
+  });
+  html += "</tr></thead><tbody>";
+
+  contribs.forEach((c, i) => {
+    const pctCls = v => v >= 0 ? "positive" : "negative";
+    const fmtPct = v => (v >= 0 ? "+" : "") + v.toFixed(3) + "%";
+    const barW = (Math.abs(c.contribution_pct) / maxAbsContrib * 50).toFixed(1);
+    const barCls = c.contribution_pct >= 0 ? "pos" : "neg";
+
+    html += `<tr>
+      <td class="sym-cell">${c.symbol}</td>
+      <td class="name-cell" title="${c.name}">${c.name}</td>
+      <td class="right">${c.weight.toFixed(2)}%</td>
+      <td class="right ${pctCls(c.stock_change_pct)}">${fmtPct(c.stock_change_pct)}</td>
+      <td class="right ${pctCls(c.contribution_pct)}">${fmtPct(c.contribution_pct)}</td>
+      <td class="right">$${c.stock_price.toFixed(2)}</td>
+    </tr>`;
+  });
+
+  html += "</tbody></table>";
+
+  html += `<div class="summary-row">
+    <span>Coverage: ${result.coverage_pct.toFixed(1)}%</span>
+    <span>Explained: <span class="${result.explained_pct >= 0 ? 'positive' : 'negative'}">${result.explained_pct >= 0 ? '+' : ''}${result.explained_pct.toFixed(3)}%</span></span>
+    <span>Residual: ${result.unexplained_pct >= 0 ? '+' : ''}${result.unexplained_pct.toFixed(3)}%</span>
+  </div>`;
+
+  document.getElementById("tableContainer").innerHTML = html;
+
+  // Attach sort handlers
+  document.querySelectorAll(".breakdown-table th").forEach(th => {
+    th.addEventListener("click", () => {
+      const col = th.dataset.col;
+      if (sortCol === col) sortDir = sortDir === "asc" ? "desc" : "asc";
+      else { sortCol = col; sortDir = col === "contribution_pct" ? "desc" : "asc"; }
+      renderTable(result);
+    });
+  });
+}
+
+// ── Chart ──
+function renderChart(result) {
+  const title = document.getElementById("chartPanelTitle");
+  title.textContent = `${result.etf_symbol} Waterfall`;
+
+  const contribs = [...result.contributions].sort((a, b) => b.contribution_pct - a.contribution_pct);
+  const labels = contribs.map(c => c.symbol);
+  const values = contribs.map(c => c.contribution_pct);
+  const colors = values.map(v => v >= 0 ? "rgba(0,200,83,0.7)" : "rgba(255,23,68,0.7)");
+  const borderColors = values.map(v => v >= 0 ? "rgba(0,200,83,1)" : "rgba(255,23,68,1)");
+
+  if (chart) chart.destroy();
+
+  const ctx = document.getElementById("contribChart").getContext("2d");
+  chart = new Chart(ctx, {
+    type: "bar",
+    data: {
+      labels,
+      datasets: [{
+        label: "Contribution (%)",
+        data: values,
+        backgroundColor: colors,
+        borderColor: borderColors,
+        borderWidth: 1,
+        borderRadius: 3,
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      indexAxis: "y",
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            label: (ctx) => {
+              const c = contribs[ctx.dataIndex];
+              return [
+                `Contribution: ${ctx.raw >= 0 ? '+' : ''}${ctx.raw.toFixed(3)}%`,
+                `Stock change: ${c.stock_change_pct >= 0 ? '+' : ''}${c.stock_change_pct.toFixed(3)}%`,
+                `Weight: ${c.weight.toFixed(2)}%`,
+              ];
+            }
+          }
+        }
+      },
+      scales: {
+        x: {
+          grid: { color: "rgba(255,255,255,0.06)" },
+          ticks: {
+            color: "#8b8fa3",
+            callback: v => (v >= 0 ? "+" : "") + v.toFixed(3) + "%"
+          },
+          title: { display: true, text: "Contribution to ETF move (%)", color: "#8b8fa3" }
+        },
+        y: {
+          grid: { display: false },
+          ticks: { color: "#e4e6eb", font: { weight: "bold", size: 11 } }
+        }
+      }
+    }
+  });
+}
+
+// Auto-run demo on load
+window.addEventListener("DOMContentLoaded", analyse);
+</script>
+</body>
+</html>

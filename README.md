@@ -38,6 +38,22 @@ etf-breakdown XLF -n 5
 etf-breakdown --demo
 ```
 
+## Web dashboard
+
+Launch an interactive browser-based dashboard:
+
+```bash
+etf-web
+```
+
+Then open http://localhost:5000. The dashboard features:
+
+- **Sector overview strip** — colour-coded cards showing each ETF's daily change, sorted best-to-worst
+- **Sortable contributions table** — click any column header to re-sort
+- **Horizontal bar chart** — waterfall-style visualisation of per-stock contributions (powered by Chart.js)
+- **Demo / Live toggle** — switch between sample data and real Yahoo Finance data
+- **ETF selector chips** — pick any combination of sector ETFs to analyse
+
 ## How it works
 
 1. **Holdings** — Fetches ETF constituent weights from Yahoo Finance via `yfinance`
@@ -69,3 +85,4 @@ SPY, QQQ, DIA, IWM — or pass any valid ETF ticker.
 - Python >= 3.10
 - `yfinance` (Yahoo Finance data)
 - `rich` (terminal formatting)
+- `flask` (web dashboard)

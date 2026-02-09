@@ -6,10 +6,12 @@ requires-python = ">=3.10"
 dependencies = [
     "yfinance>=0.2.30",
     "rich>=13.0",
+    "flask>=3.0",
 ]
 
 [project.scripts]
 etf-breakdown = "etf_breakdown.cli:main"
+etf-web = "etf_breakdown.web:main"
 
 [build-system]
 requires = ["setuptools>=68.0"]
