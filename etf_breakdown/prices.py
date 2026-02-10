@@ -1,56 +1,42 @@
-"""Fetch near-real-time and previous-close prices for a batch of tickers."""
+"""Price fetching — delegates to the configured provider backend.
+
+Import providers on module load so they self-register.
+"""
 
 from __future__ import annotations
 
-import logging
-from dataclasses import dataclass
+# Re-export PriceSnapshot from the provider package so existing
+# imports (``from .prices import PriceSnapshot``) continue to work.
+from .providers import PriceSnapshot, get_provider, available_providers  # noqa: F401
 
-import yfinance as yf
+# Import provider modules so they register themselves on startup.
+from .providers import yahoo as _yahoo  # noqa: F401
 
-log = logging.getLogger(__name__)
-
-
-@dataclass(frozen=True, slots=True)
-class PriceSnapshot:
-    symbol: str
-    current_price: float
-    previous_close: float
-
-    @property
-    def change(self) -> float:
-        return self.current_price - self.previous_close
-
-    @property
-    def change_pct(self) -> float:
-        if self.previous_close == 0:
-            return 0.0
-        return (self.current_price - self.previous_close) / self.previous_close
+try:
+    from .providers import ib as _ib  # noqa: F401
+except Exception:
+    pass  # ib_insync not installed — that's fine
 
 
-def get_prices(symbols: list[str]) -> dict[str, PriceSnapshot]:
-    """Fetch current price and previous close for every symbol in *symbols*.
+def get_prices(
+    symbols: list[str],
+    source: str = "yahoo",
+    **provider_kwargs,
+) -> dict[str, PriceSnapshot]:
+    """Fetch prices using the named provider.
 
-    Uses ``yfinance.download`` with ``period="1d"`` for the batch, plus
-    ``Ticker.fast_info`` for the real-time quote, which gives the
-    closest-to-live price available through the free Yahoo Finance API
-    (typically delayed ~15 min during market hours).
+    Parameters
+    ----------
+    symbols:
+        List of ticker symbols to fetch.
+    source:
+        Provider name — ``"yahoo"`` (default) or ``"ib"``.
+    **provider_kwargs:
+        Extra kwargs forwarded to the provider constructor
+        (e.g. ``host``, ``port``, ``client_id`` for IB).
     """
-    snapshots: dict[str, PriceSnapshot] = {}
-
-    tickers = yf.Tickers(" ".join(symbols))
-
-    for sym in symbols:
-        try:
-            ticker = tickers.tickers[sym]
-            info = ticker.fast_info
-            current = float(info.last_price)
-            prev_close = float(info.previous_close)
-            snapshots[sym] = PriceSnapshot(
-                symbol=sym,
-                current_price=current,
-                previous_close=prev_close,
-            )
-        except Exception:
-            log.warning("Could not fetch price for %s — skipping", sym)
-
-    return snapshots
+    provider = get_provider(source, **provider_kwargs)
+    try:
+        return provider.get_prices(symbols)
+    finally:
+        provider.close()

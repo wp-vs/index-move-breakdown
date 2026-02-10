@@ -3,9 +3,7 @@
 from __future__ import annotations
 
 import argparse
-import json
 import logging
-import os
 from pathlib import Path
 
 from flask import Flask, jsonify, request, send_from_directory
@@ -13,7 +11,7 @@ from flask import Flask, jsonify, request, send_from_directory
 from .demo_data import DEMO_ETFS, get_demo_results
 from .engine import BreakdownResult, compute_breakdown
 from .holdings import get_holdings
-from .prices import get_prices
+from .prices import get_prices, available_providers
 from .sectors import ALL_KNOWN_ETFS, SECTOR_ETFS
 
 log = logging.getLogger(__name__)
@@ -55,8 +53,8 @@ def _result_to_dict(r: BreakdownResult) -> dict:
     }
 
 
-def _analyse_live(etf_symbol: str, top_n: int | None) -> dict | None:
-    """Run the live pipeline for one ETF."""
+def _analyse_live(etf_symbol: str, top_n: int | None, source: str = "yahoo") -> dict | None:
+    """Run the live pipeline for one ETF using the specified price source."""
     try:
         holdings = get_holdings(etf_symbol, top_n=top_n)
     except RuntimeError:
@@ -66,7 +64,7 @@ def _analyse_live(etf_symbol: str, top_n: int | None) -> dict | None:
         return None
 
     all_symbols = [h.symbol for h in holdings] + [etf_symbol]
-    prices = get_prices(all_symbols)
+    prices = get_prices(all_symbols, source=source)
 
     etf_snap = prices.get(etf_symbol)
     if etf_snap is None:
@@ -93,14 +91,21 @@ def api_sectors():
     )
 
 
+@app.route("/api/providers")
+def api_providers():
+    """Return available price data sources."""
+    return jsonify({"providers": available_providers()})
+
+
 @app.route("/api/breakdown")
 def api_breakdown():
     """Analyse one or more ETFs and return the breakdown as JSON.
 
     Query params:
-        etfs:  comma-separated list of ETF tickers (default: all SPDR sectors)
-        top:   max holdings per ETF (optional)
-        demo:  if "1", use sample data
+        etfs:    comma-separated list of ETF tickers (default: all SPDR sectors)
+        top:     max holdings per ETF (optional)
+        demo:    if "1", use sample data
+        source:  price provider — "yahoo" (default) or "ib"
     """
     raw = request.args.get("etfs", "")
     etf_symbols = [s.strip().upper() for s in raw.split(",") if s.strip()]
@@ -111,6 +116,7 @@ def api_breakdown():
     top_n = int(top_n_str) if top_n_str.isdigit() else None
 
     use_demo = request.args.get("demo", "0") == "1"
+    source = request.args.get("source", "yahoo")
 
     results = []
     if use_demo:
@@ -121,11 +127,11 @@ def api_breakdown():
             results.append(d)
     else:
         for sym in etf_symbols:
-            d = _analyse_live(sym, top_n=top_n)
+            d = _analyse_live(sym, top_n=top_n, source=source)
             if d is not None:
                 results.append(d)
 
-    return jsonify({"results": results})
+    return jsonify({"results": results, "source": source})
 
 
 # ---------------------------------------------------------------------------
@@ -156,6 +162,7 @@ def main():
         logging.basicConfig(level=logging.DEBUG)
 
     print(f"Starting ETF Breakdown dashboard on http://{args.host}:{args.port}")
+    print(f"Available price sources: {', '.join(available_providers())}")
     print("Press Ctrl+C to stop.")
     app.run(host=args.host, port=args.port, debug=args.verbose)
 

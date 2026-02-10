@@ -264,7 +264,8 @@
   <div class="controls">
     <div class="toggle-group" id="modeToggle">
       <div class="chip active" data-mode="demo">Demo</div>
-      <div class="chip" data-mode="live">Live</div>
+      <div class="chip" data-mode="yahoo">Yahoo</div>
+      <div class="chip" data-mode="ib">IB TWS</div>
     </div>
     <div class="etf-chips" id="etfChips"></div>
     <button class="btn" id="analyseBtn">Analyse</button>
@@ -358,15 +359,20 @@ async function analyse() {
   try {
     const params = new URLSearchParams();
     params.set("etfs", etfs.join(","));
-    if (mode === "demo") params.set("demo", "1");
+    if (mode === "demo") {
+      params.set("demo", "1");
+    } else {
+      params.set("source", mode);  // "yahoo" or "ib"
+    }
 
     const resp = await fetch(`/api/breakdown?${params}`);
     const data = await resp.json();
     allResults = data.results;
 
+    const sourceLabels = { demo: "demo data", yahoo: "Yahoo Finance", ib: "IB TWS (real-time)" };
     renderOverview();
     if (allResults.length > 0) selectETF(allResults[0].etf_symbol);
-    setStatus(`Updated · ${allResults.length} ETFs · ${mode === "demo" ? "demo data" : "live prices"}`);
+    setStatus(`Updated · ${allResults.length} ETFs · ${sourceLabels[mode] || mode}`);
   } catch (err) {
     setStatus("Error: " + err.message);
   } finally {

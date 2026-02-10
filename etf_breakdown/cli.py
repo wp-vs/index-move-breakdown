@@ -9,13 +9,14 @@ import sys
 from .display import console, print_breakdown, print_summary_table
 from .engine import BreakdownResult, compute_breakdown
 from .holdings import get_holdings
-from .prices import get_prices
+from .prices import get_prices, available_providers
 from .sectors import ALL_KNOWN_ETFS, SECTOR_ETFS
 
 log = logging.getLogger(__name__)
 
 
 def _build_parser() -> argparse.ArgumentParser:
+    providers = available_providers()
     p = argparse.ArgumentParser(
         prog="etf-breakdown",
         description=(
@@ -37,6 +38,30 @@ def _build_parser() -> argparse.ArgumentParser:
         default=None,
         metavar="N",
         help="Only show top N holdings per ETF (default: all available)",
+    )
+    p.add_argument(
+        "-s",
+        "--source",
+        default="yahoo",
+        choices=providers,
+        help=f"Price data source (default: yahoo). Available: {', '.join(providers)}",
+    )
+    p.add_argument(
+        "--ib-host",
+        default="127.0.0.1",
+        help="IB TWS/Gateway host (default: 127.0.0.1)",
+    )
+    p.add_argument(
+        "--ib-port",
+        type=int,
+        default=7497,
+        help="IB TWS/Gateway port (default: 7497 for TWS, use 4001 for Gateway)",
+    )
+    p.add_argument(
+        "--ib-client-id",
+        type=int,
+        default=10,
+        help="IB API client ID (default: 10)",
     )
     p.add_argument(
         "--no-summary",
@@ -63,8 +88,22 @@ def _resolve_etfs(args_etfs: list[str]) -> list[str]:
     return [e.upper() for e in args_etfs]
 
 
+def _provider_kwargs(args) -> dict:
+    """Build kwargs for the price provider from CLI args."""
+    if args.source == "ib":
+        return {
+            "host": args.ib_host,
+            "port": args.ib_port,
+            "client_id": args.ib_client_id,
+        }
+    return {}
+
+
 def _analyse_etf(
-    etf_symbol: str, top_n: int | None
+    etf_symbol: str,
+    top_n: int | None,
+    source: str,
+    provider_kwargs: dict,
 ) -> BreakdownResult | None:
     """Run the full pipeline for a single ETF. Returns None on failure."""
     label = ALL_KNOWN_ETFS.get(etf_symbol, etf_symbol)
@@ -80,12 +119,12 @@ def _analyse_etf(
         console.print(f"[yellow]  No holdings returned for {etf_symbol}[/yellow]")
         return None
 
-    # Gather all symbols we need prices for (constituents + the ETF itself)
     all_symbols = [h.symbol for h in holdings] + [etf_symbol]
+    source_label = "IB TWS" if source == "ib" else "Yahoo Finance"
     console.print(
-        f"[dim]  Fetching prices for {len(holdings)} holdings...[/dim]"
+        f"[dim]  Fetching prices for {len(holdings)} holdings via {source_label}...[/dim]"
     )
-    prices = get_prices(all_symbols)
+    prices = get_prices(all_symbols, source=source, **provider_kwargs)
 
     etf_snap = prices.get(etf_symbol)
     if etf_snap is None:
@@ -107,7 +146,6 @@ def _run_demo(etf_symbols: list[str], top_n: int | None) -> list[BreakdownResult
             f"[yellow]Demo data available for: {', '.join(available)}. "
             f"None of the requested ETFs matched.[/yellow]"
         )
-        # Fall back to showing all demo ETFs
         requested = available
 
     console.print(f"[bold cyan]-- DEMO MODE (sample data) --[/bold cyan]")
@@ -144,9 +182,11 @@ def main(argv: list[str] | None = None) -> None:
     if args.demo:
         results = _run_demo(etf_symbols, top_n=args.top)
     else:
+        pkw = _provider_kwargs(args)
         results = []
         for sym in etf_symbols:
-            result = _analyse_etf(sym, top_n=args.top)
+            result = _analyse_etf(sym, top_n=args.top, source=args.source,
+                                  provider_kwargs=pkw)
             if result is not None:
                 results.append(result)
 
